@@ -18,6 +18,24 @@ flowchart LR
     D --> F[匯出 YOLO / COCO]
 ```
 
+## 三分鐘上手（Windows）
+
+事前準備：安裝 [Miniconda](https://docs.conda.io/projects/miniconda)；要使用初步標註、點選分割或訓練，另需 NVIDIA 顯示卡驅動。
+
+1. **下載**：到 [Releases](../../releases) 下載最新的 `visionloop-*.zip`。
+2. **解壓縮**：例如解壓到 `D:\visionloop`。建議路徑不要有中文或空白。
+3. **開啟 PowerShell**：在該資料夾的檔案總管網址列輸入 `powershell`，按 Enter。
+4. **安裝**（約 10～20 分鐘，視網速而定）：
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1
+   ```
+
+   過程中會下載預設的模型權重（約 2～3 GB），並詢問是否下載 YOLOv9 / GELAN（GPL-3.0 授權）。沒有 NVIDIA 顯示卡、只需要標註時，加上 `-SkipModels`。
+5. **開始使用**：雙擊桌面上的 **VisionLoop**。第一次開啟會出現導覽，帶你走一遍完整流程。
+
+之後只要雙擊捷徑即可。更新版本時，用新的 zip 覆蓋程式檔即可，專案與圖片都在 `data/` 資料夾，請勿刪除。詳細說明與其他系統見[快速開始](#快速開始)。
+
 ## 功能
 
 **標註與審核**
