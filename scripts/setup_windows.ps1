@@ -1,8 +1,11 @@
 ﻿<#
 .SYNOPSIS
-  Creates the Python environments VisionLoop needs (Windows + Anaconda / Miniconda).
+  Creates the Python environments VisionLoop needs (Windows). Nothing has to be installed first.
 
 .DESCRIPTION
+  Python comes from conda when it is installed; otherwise the script downloads uv, which
+  installs Python into this folder (tools\python, environments in envs\). Two environments:
+
   visionloop  the platform itself (FastAPI, Pillow ...). Small, no PyTorch.
   vl-models   PyTorch with CUDA + RF-DETR + transformers (Grounding DINO, SAM 2)
               + the official YOLOv9 repository (cloned into models\yolov9) if you want it.
@@ -38,7 +41,10 @@ param(
   # do not download the default model weights now (each is downloaded the first time it is used)
   [switch]$SkipWeights,
   # do not create the VisionLoop shortcuts on the desktop and in the Start menu
-  [switch]$NoShortcut
+  [switch]$NoShortcut,
+  # where Python comes from. "auto": conda if it is installed, otherwise uv, which this script
+  # downloads itself (nothing needs to be installed first); "uv" / "conda" force one of them
+  [ValidateSet("auto", "uv", "conda")] [string]$PythonManager = "auto"
 )
 
 $ErrorActionPreference = "Stop"
@@ -91,7 +97,7 @@ function Get-EnvPython([string]$conda, [string]$name) {
   return $null
 }
 
-function Ensure-Env([string]$conda, [string]$name) {
+function Ensure-CondaEnv([string]$conda, [string]$name) {
   $py = Get-EnvPython $conda $name
   if ($py) {
     Info "已有環境 $name（$py）"
@@ -104,13 +110,77 @@ function Ensure-Env([string]$conda, [string]$name) {
   return $py
 }
 
-# ---------------------------------------------------------------------------
-Step "尋找 conda"
-$conda = Find-Conda
-if (-not $conda) {
-  throw "找不到 conda。請先安裝 Miniconda 或 Anaconda（https://docs.conda.io/projects/miniconda），或在 Anaconda Prompt 裡執行這個腳本。"
+# --- uv: a single program that downloads Python itself, so nothing has to be installed first.
+# Everything stays inside this folder (tools\ and envs\); other Pythons on the computer are untouched.
+function Get-Uv {
+  $uv = Join-Path $Root "tools\uv\uv.exe"
+  if (Test-Path $uv) { return $uv }
+  $cmd = Get-Command uv.exe -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  Step "下載 uv（Python 安裝工具，約 20 MB）"
+  $zip = Join-Path $env:TEMP "visionloop-uv.zip"
+  Invoke-WebRequest "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip" -OutFile $zip
+  $dir = Join-Path $Root "tools\uv"
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  Expand-Archive $zip -DestinationPath $dir -Force
+  Remove-Item $zip
+  if (-not (Test-Path $uv)) { throw "下載 uv 失敗" }
+  return $uv
 }
-Info $conda
+
+function Ensure-UvEnv([string]$uv, [string]$name) {
+  $dir = Join-Path $Root "envs\$name"
+  $py = Join-Path $dir "Scripts\python.exe"
+  if (Test-Path $py) {
+    Info "已有環境 $name（$py）"
+    return $py
+  }
+  # --seed puts pip in the environment, so the steps below are the same as with conda
+  Run $uv @("venv", "--seed", "--python", $PythonVersion, $dir)
+  if (-not (Test-Path $py)) { throw "建立環境 $name 失敗" }
+  return $py
+}
+
+function Ensure-Env([string]$name) {
+  if ($useConda) { return Ensure-CondaEnv $conda $name }
+  return Ensure-UvEnv $uv $name
+}
+
+# Node.js is only needed to build the web UI from a git checkout (a release zip ships it built)
+function Get-PortableNode {
+  $dir = Join-Path $Root "tools\node"
+  if (Test-Path (Join-Path $dir "node.exe")) { return $dir }
+  $index = Invoke-RestMethod "https://nodejs.org/dist/index.json"
+  $version = ($index | Where-Object { $_.version -like "v22.*" } | Select-Object -First 1).version
+  Step "下載 Node.js $version（用來建置網頁介面）"
+  $zip = Join-Path $env:TEMP "visionloop-node.zip"
+  Invoke-WebRequest "https://nodejs.org/dist/$version/node-$version-win-x64.zip" -OutFile $zip
+  $tools = Join-Path $Root "tools"
+  Expand-Archive $zip -DestinationPath $tools -Force
+  Remove-Item $zip
+  Move-Item (Join-Path $tools "node-$version-win-x64") $dir
+  return $dir
+}
+
+# ---------------------------------------------------------------------------
+Step "準備 Python"
+$conda = $null
+$uv = $null
+$hasUvEnvs = Test-Path (Join-Path $Root "envs\$PlatformEnv\Scripts\python.exe")
+if ($PythonManager -eq "conda" -or ($PythonManager -eq "auto" -and -not $hasUvEnvs)) { $conda = Find-Conda }
+if ($PythonManager -eq "conda" -and -not $conda) {
+  throw "找不到 conda。請先安裝 Miniconda 或 Anaconda，或改用 -PythonManager uv（不需要事先安裝任何東西）。"
+}
+$useConda = [bool]$conda
+if ($useConda) {
+  Info "使用 conda：$conda"
+} else {
+  # Python installed by uv goes here as well, and only Python versions uv itself installed are used
+  $env:UV_PYTHON_INSTALL_DIR = Join-Path $Root "tools\python"
+  $env:UV_PYTHON_PREFERENCE = "only-managed"
+  $uv = Get-Uv
+  Info "使用 uv：$uv（Python 與環境都放在這個資料夾的 tools\ 和 envs\，不影響電腦上的其他 Python）"
+}
 
 $settingsPath = Join-Path $Root "local_settings.json"
 $settings = @{}
@@ -121,7 +191,7 @@ if (Test-Path $settingsPath) {
 
 # ---------------------------------------------------------------------------
 Step "平台環境：$PlatformEnv"
-$platformPy = Ensure-Env $conda $PlatformEnv
+$platformPy = Ensure-Env $PlatformEnv
 Run $platformPy @("-m", "pip", "install", "--upgrade", "pip")
 Run $platformPy @("-m", "pip", "install", "-r", (Join-Path $Root "backend\requirements.txt"))
 # the desktop window (scripts\desktop.ps1); Windows only, so not in requirements.txt
@@ -134,9 +204,15 @@ $env:PATH = "$envDir;$envDir\Library\bin;$envDir\Scripts;$env:PATH"
 if (Test-Path (Join-Path $Root "frontend\dist\.release")) {
   Info "網頁介面已經建置好（Release 版本），不需要 Node.js"
 } else {
+  $nodeDir = Join-Path $Root "tools\node"
+  if (Test-Path (Join-Path $nodeDir "node.exe")) { $env:PATH = "$nodeDir;$env:PATH" }
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Step "安裝 Node.js 到 $PlatformEnv（用來建置網頁介面）"
-    Run $conda @("install", "-y", "-n", $PlatformEnv, "-c", "conda-forge", "--override-channels", "nodejs=22")
+    if ($useConda) {
+      Step "安裝 Node.js 到 $PlatformEnv（用來建置網頁介面）"
+      Run $conda @("install", "-y", "-n", $PlatformEnv, "-c", "conda-forge", "--override-channels", "nodejs=22")
+    } else {
+      $env:PATH = "$(Get-PortableNode);$env:PATH"
+    }
   } else {
     Info "Node.js $(node --version) 已安裝"
   }
@@ -151,7 +227,7 @@ if (Test-Path (Join-Path $Root "frontend\dist\.release")) {
 # ---------------------------------------------------------------------------
 if (-not $SkipModels) {
   Step "模型環境：$ModelsEnv（PyTorch $Cuda、RF-DETR、Grounding DINO、SAM 2）"
-  $modelsPy = Ensure-Env $conda $ModelsEnv
+  $modelsPy = Ensure-Env $ModelsEnv
   Run $modelsPy @("-m", "pip", "install", "--upgrade", "pip")
 
   Step "安裝 PyTorch（CUDA 版，約 2.5 GB，需要一點時間）"
@@ -259,4 +335,8 @@ if (-not $NoShortcut) {
 
 $mins = [math]::Round(((Get-Date) - $Started).TotalMinutes, 1)
 Write-Host ""
-Write-Host "完成（$mins 分鐘）。之後雙擊桌面上的「VisionLoop」就能開啟。" -ForegroundColor Green
+if ($NoShortcut) {
+  Write-Host "完成（$mins 分鐘）。之後執行 scripts\desktop.ps1 就能開啟。" -ForegroundColor Green
+} else {
+  Write-Host "完成（$mins 分鐘）。之後雙擊桌面上的「VisionLoop」就能開啟。" -ForegroundColor Green
+}

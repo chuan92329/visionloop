@@ -7,3 +7,5 @@ frontend/dist
 local_settings.json
 _backup_*
 *.zip
+tools
+envs

@@ -22,6 +22,8 @@ frontend/*.tsbuildinfo
 # machine-specific
 local_settings.json
 models/
+tools/
+envs/
 
 # local backups and update bundles
 _backup_*/

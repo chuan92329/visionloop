@@ -115,10 +115,11 @@ def ui_needs_build() -> bool:
 
 
 def build_ui(log_path: Path) -> None:
-    """npm install (first time) + npm run build, hidden; Node.js may live in the conda env."""
+    """npm install (first time) + npm run build, hidden. Node.js may live in the conda env or in
+    tools\\node (downloaded by setup_windows.ps1 when Python comes from uv)."""
     env_dir = Path(sys.executable).parent
-    path = os.pathsep.join([str(env_dir), str(env_dir / "Library" / "bin"), str(env_dir / "Scripts"),
-                            os.environ.get("PATH", "")])
+    path = os.pathsep.join([str(ROOT / "tools" / "node"), str(env_dir), str(env_dir / "Library" / "bin"),
+                            str(env_dir / "Scripts"), os.environ.get("PATH", "")])
     npm = shutil.which("npm", path=path)
     if not npm:
         raise RuntimeError("網頁介面需要重新建置，但找不到 Node.js。請重新執行 "

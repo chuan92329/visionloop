@@ -20,7 +20,7 @@ flowchart LR
 
 ## 三分鐘上手（Windows）
 
-事前準備：安裝 [Miniconda](https://docs.conda.io/projects/miniconda)；要使用初步標註、點選分割或訓練，另需 NVIDIA 顯示卡驅動。
+不需要事先安裝 Python 或其他軟體。要使用初步標註、點選分割或訓練，需要 NVIDIA 顯示卡驅動。
 
 1. **下載**：到 [Releases](../../releases) 下載最新的 `visionloop-*.zip`。
 2. **解壓縮**：例如解壓到 `D:\visionloop`。建議路徑不要有中文或空白。
@@ -95,7 +95,7 @@ flowchart LR
 
 ### Windows（建議，含 GPU 模型環境）
 
-需要 [Miniconda](https://docs.conda.io/projects/miniconda) 或 Anaconda，以及 NVIDIA 顯示卡驅動。用 `git clone` 下載，或到 [Releases](../../releases) 下載 `visionloop-*.zip`（已內含建置好的前端），解壓縮後在專案資料夾執行：
+不需要事先安裝 Python；要使用模型則需要 NVIDIA 顯示卡驅動。用 `git clone` 下載，或到 [Releases](../../releases) 下載 `visionloop-*.zip`（已內含建置好的前端），解壓縮後在專案資料夾執行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1   # 第一次，約 10～20 分鐘
@@ -105,7 +105,9 @@ powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1   # 第一次
 
 視窗開著的時候，也可以用瀏覽器打開 <http://127.0.0.1:8000> 操作同一份資料。不想建立捷徑可以加上 `-NoShortcut`，之後用 `scripts\desktop.ps1` 開啟。
 
-`setup_windows.ps1` 會建立兩個 conda 環境，並把路徑寫進 `local_settings.json`，之後不需要再設定任何環境變數：
+`setup_windows.ps1` 會自動準備 Python：電腦上已經有 conda（Miniconda / Anaconda）就用 conda；沒有的話，會下載 [uv](https://github.com/astral-sh/uv)（約 20 MB 的 Python 安裝工具），由它把 Python 裝在專案資料夾的 `tools\`，環境放在 `envs\`，不會影響電腦上其他的 Python。用 `git clone` 下載、又沒有 Node.js 時，也會把 Node.js 下載到 `tools\` 來建置介面。
+
+接著建立兩個環境，並把路徑寫進 `local_settings.json`，之後不需要再設定任何環境變數：
 
 | 環境 | 內容 |
 | --- | --- |
@@ -131,6 +133,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1   # 第一次
 | `-SkipWeights` | 先不下載預設權重，第一次使用時才下載 |
 | `-SkipModels` | 只安裝平台本身，不安裝 PyTorch 與模型 |
 | `-Cuda cu126` | 較舊的顯示卡或驅動 |
+| `-PythonManager uv` / `conda` | 指定用 uv 或 conda 準備 Python（預設自動選擇） |
 | `-NoShortcut` | 不建立桌面與開始功能表捷徑 |
 
 ### macOS / Linux

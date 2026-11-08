@@ -16,6 +16,7 @@ VisionLoop 本身以 MIT 授權釋出。以下是它使用或可以搭配使用�
 | React / React DOM / React Router | 前端介面 | MIT |
 | Konva / react-konva | 標註畫布 | MIT |
 | pywebview（只在 Windows 由 setup_windows.ps1 安裝） | 獨立視窗 | BSD-3-Clause |
+| uv（電腦上沒有 conda 時，由 setup_windows.ps1 下載到 tools\，不隨專案散布） | 安裝 Python 與建立環境 | MIT / Apache-2.0 |
 
 以上皆允許商業使用。
 
