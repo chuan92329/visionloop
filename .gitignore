@@ -1,0 +1,28 @@
+# data & runtime
+data/
+*.sqlite3*
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# node
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+# misc
+.DS_Store
+.idea/
+.vscode/
+
+# machine-specific
+local_settings.json
+models/
+
+# local backups and update bundles
+_backup_*/
+/*.zip

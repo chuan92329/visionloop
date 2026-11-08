@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+pydantic>=2.6
+pillow>=10.0
+python-multipart>=0.0.9
+pyyaml>=6.0
+pillow-heif>=0.18
+rawpy>=0.21

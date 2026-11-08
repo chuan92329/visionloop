@@ -1,0 +1,9 @@
+data
+models
+frontend/node_modules
+frontend/dist
+**/__pycache__
+.git
+local_settings.json
+_backup_*
+*.zip

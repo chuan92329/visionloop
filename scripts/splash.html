@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>VisionLoop</title>
+<style>
+  /* Shown by desktop.py while the server starts: "VisionLoop" is written out in script, then fills in.
+     Uses fonts every Windows already has, so it works offline. */
+  html, body { margin: 0; height: 100%; background: #1e2430; overflow: hidden; }
+  body { display: grid; place-items: center; transition: opacity .35s ease; }
+  body.leave { opacity: 0; }
+  svg { width: min(78vw, 900px); height: auto; overflow: visible; }
+  .word {
+    font-family: "Segoe Script", "Lucida Handwriting", "Brush Script MT", cursive;
+    font-size: 132px;
+    fill: url(#ink); fill-opacity: 0;
+    stroke: url(#ink); stroke-width: 1.6; stroke-linejoin: round;
+    /* the outline of each letter is traced while the word is revealed from left to right */
+    stroke-dasharray: 900; stroke-dashoffset: 900;
+    clip-path: inset(-20% 100% -20% 0);
+    animation: reveal 1.8s cubic-bezier(.45, .05, .4, 1) forwards, write 1.9s ease-out forwards,
+               fill .6s ease 1.5s forwards;
+  }
+  .flourish {
+    fill: none; stroke: url(#ink); stroke-width: 3; stroke-linecap: round;
+    stroke-dasharray: 760; stroke-dashoffset: 760;
+    animation: write .7s ease-out 1.75s forwards;
+  }
+  .tag {
+    font-family: "Times New Roman", "標楷體", "DFKai-SB", serif; font-size: 26px; letter-spacing: 6px;
+    fill: #8b93a7; opacity: 0; animation: show .6s ease 2.2s forwards;
+  }
+  @keyframes reveal { to { clip-path: inset(-20% -2% -20% 0); } }
+  @keyframes write { to { stroke-dashoffset: 0; } }
+  @keyframes fill { to { fill-opacity: 1; stroke-width: .6; } }
+  @keyframes show { to { opacity: 1; } }
+</style>
+</head>
+<body>
+<svg viewBox="0 0 900 300" role="img" aria-label="VisionLoop">
+  <defs>
+    <linearGradient id="ink" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#3CC6A8"/>
+    </linearGradient>
+  </defs>
+  <text class="word" x="450" y="160" text-anchor="middle">VisionLoop</text>
+  <path class="flourish" d="M150 205 C 330 232, 560 228, 760 196 C 790 191, 806 196, 798 206"/>
+  <text class="tag" x="450" y="270" text-anchor="middle">標一點，學一點，模型越準，標得越快</text>
+</svg>
+<script>
+  window.vlLeave = function () { document.body.classList.add("leave"); };
+  // desktop.py switches to the app only after this is set: the whole opening has been shown
+  window.vlDone = false;
+  document.querySelector(".tag").addEventListener("animationend", function () {
+    setTimeout(function () { window.vlDone = true; }, 600);  // let the finished name sit for a moment
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# docker compose up --build   ->  http://localhost:8000
+#
+# The image contains the platform only. To train YOLOv9 / RT-DETR inside the
+# container, build your own image FROM this one with PyTorch installed, mount
+# the cloned model repositories and set VISIONLOOP_YOLOV9_REPO /
+# VISIONLOOP_RTDETR_REPO (see README).
+services:
+  visionloop:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    # Uncomment to give the container your NVIDIA GPU (needs nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
