@@ -234,8 +234,10 @@ if (-not $SkipModels) {
   Run $modelsPy @("-m", "pip", "install", "torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/$Cuda")
 
   Step "安裝 RF-DETR 與 transformers"
-  # setuptools<81 keeps pkg_resources, which the YOLOv9 code still imports
-  Run $modelsPy @("-m", "pip", "install", "rfdetr[train]>=1.11,<2", "transformers>=5.1,<6", "pillow", "pyyaml", "setuptools<81")
+  # current setuptools (older ones have known vulnerabilities); the pkg_resources the YOLOv9 code
+  # imports is supplied by yolov9_compat.py when setuptools no longer has it
+  Run $modelsPy @("-m", "pip", "install", "rfdetr[train]>=1.11,<2", "transformers>=5.1,<6", "pillow", "pyyaml")
+  Run $modelsPy @("-m", "pip", "install", "--upgrade", "setuptools")
   $settings["models_python"] = $modelsPy
 
   if (-not $SkipWeights) {

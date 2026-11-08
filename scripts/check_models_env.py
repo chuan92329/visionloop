@@ -57,11 +57,9 @@ def main() -> int:
             print(f"{FAIL} {label}：{exc}")
             failed = True
 
-    try:
-        import pkg_resources  # noqa: F401  (YOLOv9 imports it)
-    except ImportError:
-        print(f"{FAIL} 缺少 pkg_resources（YOLOv9 需要）：請執行 pip install \"setuptools<81\"")
-        failed = True
+    # YOLOv9's scripts run through this launcher, which supplies pkg_resources when setuptools lacks it
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend" / "app" / "plugins" / "builtin"))
+    import yolov9_compat  # noqa: F401
 
     repo = Path(args.yolov9)
     if (repo / "train_dual.py").exists():

@@ -29,6 +29,52 @@ if np is not None:
     if not hasattr(np, "float"):
         np.float = float
 
+
+def _pkg_resources_stand_in():
+    """The repo imports pkg_resources, which setuptools 81+ no longer ships. Rather than pinning an
+    old setuptools (which has known vulnerabilities), provide the four names it uses."""
+    import types
+    from importlib import metadata
+
+    from packaging.requirements import Requirement
+    from packaging.version import parse as parse_version
+
+    class DistributionNotFound(Exception):
+        pass
+
+    class VersionConflict(Exception):
+        pass
+
+    def parse_requirements(lines):
+        for line in lines if not isinstance(lines, str) else lines.splitlines():
+            line = line.split("#", 1)[0].strip()
+            if line and not line.startswith("-"):
+                yield Requirement(line)
+
+    def require(requirement):
+        req = Requirement(str(requirement))
+        try:
+            version = metadata.version(req.name)
+        except metadata.PackageNotFoundError as exc:
+            raise DistributionNotFound(req.name) from exc
+        if version not in req.specifier:
+            raise VersionConflict(f"{req.name} {version} does not satisfy {req.specifier}")
+        return []
+
+    module = types.ModuleType("pkg_resources")
+    module.parse_version = parse_version
+    module.parse_requirements = parse_requirements
+    module.require = require
+    module.DistributionNotFound = DistributionNotFound
+    module.VersionConflict = VersionConflict
+    return module
+
+
+try:
+    import pkg_resources  # noqa: F401
+except ImportError:
+    sys.modules["pkg_resources"] = _pkg_resources_stand_in()
+
 SEG_PREDICT_BUG = re.compile(r"^( *)pred, proto = model\(im, augment=augment, visualize=visualize\)\[:2\]\n", re.M)
 SEG_PREDICT_FIX = r"\g<0>\1proto = proto[-1]\n"
 
