@@ -202,7 +202,19 @@ class Boot:
             self.thread.join(timeout=10)
 
 
+def ensure_utf8_mode() -> None:
+    """Read and write files as UTF-8, not the Windows code page (cp950 on Traditional Chinese
+    Windows), which cannot read the Chinese class names in data.yaml. The shortcut starts us with
+    -X utf8; started any other way, start again in UTF-8 mode."""
+    if sys.flags.utf8_mode:
+        return
+    os.environ["PYTHONUTF8"] = "1"
+    subprocess.Popen([sys.executable, "-X", "utf8", *sys.argv])
+    sys.exit(0)
+
+
 def main() -> None:
+    ensure_utf8_mode()
     try:
         import webview
     except ImportError:  # started from the shortcut there is no console to print this to

@@ -158,7 +158,7 @@ class RTDETRv2Plugin(ModelPlugin):
         v = ctx.variant if ctx.variant in CONFIGS else "r18vd"
         ctx.work_dir.mkdir(parents=True, exist_ok=True)
         list_file = ctx.work_dir / "images.txt"
-        list_file.write_text("\n".join(str(p) for p in images))
+        list_file.write_text("\n".join(str(p) for p in images), encoding="utf-8")
         out_file = ctx.work_dir / "predictions.jsonl"
         cmd = [
             python_executable("VISIONLOOP_RTDETR_PYTHON"),
@@ -176,7 +176,7 @@ class RTDETRv2Plugin(ModelPlugin):
         if code != 0 or not out_file.exists():
             raise RuntimeError(f"RT-DETRv2 推論失敗（exit code {code}），請查看任務紀錄")
         results: dict[str, list[Prediction]] = {}
-        for line in out_file.read_text().splitlines():
+        for line in out_file.read_text(encoding="utf-8").splitlines():
             rec = json.loads(line)
             results[rec["path"]] = [
                 Prediction(int(c), x1, y1, x2 - x1, y2 - y1, s) for c, x1, y1, x2, y2, s in rec["boxes"]
@@ -220,7 +220,7 @@ def _read_metrics(log_txt: Path) -> dict:
         return {}
     best: dict | None = None
     epochs = 0
-    for line in log_txt.read_text().splitlines():
+    for line in log_txt.read_text(encoding="utf-8").splitlines():
         try:
             rec = json.loads(line)
         except json.JSONDecodeError:

@@ -14,4 +14,4 @@ if (Test-Path $settingsPath) {
 # pythonw.exe has no console window
 $pyw = Join-Path (Split-Path $py -Parent) "pythonw.exe"
 if (-not (Test-Path $pyw)) { $pyw = $py }
-Start-Process -FilePath $pyw -ArgumentList "`"$(Join-Path $Root 'scripts\desktop.py')`"" -WorkingDirectory (Join-Path $Root "backend")
+Start-Process -FilePath $pyw -ArgumentList "-X utf8 `"$(Join-Path $Root 'scripts\desktop.py')`"" -WorkingDirectory (Join-Path $Root "backend")

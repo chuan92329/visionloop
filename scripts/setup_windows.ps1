@@ -325,7 +325,8 @@ if (-not $NoShortcut) {
     # straight to pythonw (no console, no PowerShell in between): the window opens at once, with
     # Windows' usual launch feedback; desktop.py rebuilds the web UI itself when it is out of date
     $lnk.TargetPath = Join-Path (Split-Path $platformPy -Parent) "pythonw.exe"
-    $lnk.Arguments = "`"$(Join-Path $Root 'scripts\desktop.py')`""
+    # -X utf8: read and write files as UTF-8 (Chinese class names), not the Windows code page
+    $lnk.Arguments = "-X utf8 `"$(Join-Path $Root 'scripts\desktop.py')`""
     $lnk.WorkingDirectory = Join-Path $Root "backend"
     $lnk.IconLocation = "$(Join-Path $Root 'scripts\visionloop.ico'),0"
     $lnk.WindowStyle = 1

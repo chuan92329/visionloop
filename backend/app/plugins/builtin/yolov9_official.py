@@ -105,9 +105,9 @@ class YoloV9Plugin(ModelPlugin):
         v = ctx.variant if ctx.variant in {x.id for x in self.variants} else "c"
 
         data_yaml = ctx.dataset_dir / "data.yaml"
-        data = yaml.safe_load(data_yaml.read_text())
+        data = yaml.safe_load(data_yaml.read_text(encoding="utf-8"))
         data["path"] = str(ctx.dataset_dir.resolve())  # the repo resolves relative paths against itself
-        data_yaml.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
+        data_yaml.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
         init = ctx.init_weights or _find_pretrained(repo, v)
         if init:
@@ -227,9 +227,9 @@ class YoloV9SegPlugin(ModelPlugin):
         repo = _require_repo(self)
         hooks = ctx.hooks
         data_yaml = ctx.dataset_dir / "data.yaml"
-        data = yaml.safe_load(data_yaml.read_text())
+        data = yaml.safe_load(data_yaml.read_text(encoding="utf-8"))
         data["path"] = str(ctx.dataset_dir.resolve())  # the repo resolves relative paths against itself
-        data_yaml.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
+        data_yaml.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
         pretrained = repo / "weights" / "gelan-c-seg.pt"
         init = ctx.init_weights or (pretrained.resolve() if pretrained.exists() else None)
@@ -318,7 +318,7 @@ def _read_seg_txt(path: Path, image: Path) -> list[Prediction]:
     with PILImage.open(image) as im:
         W, H = im.size
     out = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         parts = line.split()
         values = list(map(float, parts[1:-1]))
         if len(values) < 6 or len(values) % 2:  # an empty mask has no usable outline
@@ -368,7 +368,7 @@ def _read_yolo_txt(path: Path, image: Path) -> list[Prediction]:
     with PILImage.open(image) as im:
         W, H = im.size
     out = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         parts = line.split()
         if len(parts) < 6:
             continue
@@ -381,7 +381,7 @@ def _read_metrics(results_csv: Path, suffix: str = "") -> dict:
     """``suffix``: the segmentation scripts log box "(B)" and mask "(M)" columns."""
     if not results_csv.exists():
         return {}
-    with results_csv.open() as f:
+    with results_csv.open(encoding="utf-8") as f:
         # the segmentation scripts end the file with a summary row that does not match the header
         rows = [
             {k.strip(): v.strip() for k, v in r.items()}
