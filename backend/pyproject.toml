@@ -1,6 +1,6 @@
 [project]
 name = "visionloop-backend"
-version = "0.1.0"
+version = "0.1.1"
 description = "VisionLoop API server: annotation, review, dataset split and model plugins"
 requires-python = ">=3.10"
 license = { text = "MIT" }
