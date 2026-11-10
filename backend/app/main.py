@@ -17,7 +17,7 @@ from . import __version__
 from .config import settings
 from .db import init_engine
 from .plugins import registry
-from .routers import annotations, dataset, images, jobs, projects, sam
+from .routers import annotations, dataset, images, jobs, projects, sam, updates
 from .services.jobs import runner
 from .services.sam_interactive import session as sam_session
 
@@ -42,7 +42,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (projects.router, images.router, annotations.router, dataset.router, jobs.router, sam.router):
+for r in (projects.router, images.router, annotations.router, dataset.router, jobs.router, sam.router,
+          updates.router):
     app.include_router(r)
 
 

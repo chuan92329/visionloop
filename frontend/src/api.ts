@@ -168,6 +168,15 @@ export interface ImageQuery {
   order?: "asc" | "desc";
 }
 
+export interface UpdateInfo {
+  current: string;
+  enabled: boolean;
+  latest: string | null;
+  newer: boolean;
+  url: string;
+  notes: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -290,6 +299,7 @@ export const api = {
   jobs: (pid: number) => request<Job[]>("GET", `/api/projects/${pid}/jobs`),
   job: (id: number) => request<Job>("GET", `/api/jobs/${id}`),
   cancelJob: (id: number) => request<Job>("POST", `/api/jobs/${id}/cancel`),
+  updateCheck: () => request<UpdateInfo>("GET", "/api/update-check"),
   samInfo: () => request<{ model: string; cached: boolean; size_mb: number | null }>("GET", "/api/sam/info"),
   samPrepare: (imageId: number) => request<{ ready: boolean }>("POST", `/api/images/${imageId}/sam/prepare`),
   samSegment: (

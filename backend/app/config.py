@@ -26,6 +26,8 @@ _LOCAL_KEYS = {
     "hf_home": "HF_HOME",
     # personal opt-in, not part of the published defaults: shows the C-RADIOv4 Probe backbones
     "experimental_backbones": "VISIONLOOP_EXPERIMENTAL_BACKBONES",
+    # false: never ask GitHub whether a newer version exists
+    "check_updates": "VISIONLOOP_CHECK_UPDATES",
 }
 
 
@@ -41,8 +43,10 @@ def apply_local_settings(path: Path = LOCAL_SETTINGS) -> dict:
     except (OSError, ValueError):
         return {}
     for key, env in _LOCAL_KEYS.items():
-        if data.get(key) and not os.environ.get(env):
-            os.environ[env] = str(data[key])
+        value = data.get(key)
+        if value is not None and value != "" and not os.environ.get(env):
+            # booleans as "true" / "false" (a false switch must be passed on, not dropped)
+            os.environ[env] = str(value).lower() if isinstance(value, bool) else str(value)
     return data
 
 
