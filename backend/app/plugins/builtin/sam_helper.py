@@ -12,6 +12,11 @@ from __future__ import annotations
 import argparse
 import json
 
+try:  # run as a script: the module next to it
+    import hf_local
+except ImportError:  # imported as part of the platform (tests)
+    from . import hf_local
+
 BATCH = 32  # boxes per forward pass
 
 
@@ -34,8 +39,8 @@ def main() -> None:
         device = "cpu" if requested == "cpu" else f"cuda:{str(requested).split(',')[0]}"
     print(f"torch {torch.__version__}, device {device}", flush=True)
     print(f"loading {spec['model']} (first run downloads it from Hugging Face)", flush=True)
-    processor = Sam2Processor.from_pretrained(spec["model"])
-    model = Sam2Model.from_pretrained(spec["model"]).to(device).eval()
+    processor = hf_local.from_pretrained(Sam2Processor, spec["model"])
+    model = hf_local.from_pretrained(Sam2Model, spec["model"]).to(device).eval()
 
     images = spec["images"]
     with open(spec["out"], "w", encoding="utf-8") as out:

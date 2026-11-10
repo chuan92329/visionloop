@@ -24,6 +24,11 @@ from __future__ import annotations
 import json
 import sys
 
+try:  # run as a script: the module next to it
+    import hf_local
+except ImportError:  # imported as part of the platform (tests)
+    from . import hf_local
+
 MARK = "@@"
 
 
@@ -55,8 +60,8 @@ def main() -> None:
         image.update(key=None, embeddings=None)
         if device.startswith("cuda"):
             torch.cuda.empty_cache()
-        loaded["processor"] = Sam2Processor.from_pretrained(model_id)
-        loaded["model"] = Sam2Model.from_pretrained(model_id).to(device).eval()
+        loaded["processor"] = hf_local.from_pretrained(Sam2Processor, model_id)
+        loaded["model"] = hf_local.from_pretrained(Sam2Model, model_id).to(device).eval()
         loaded.update(model_id=model_id, device=device)
 
     def ensure_image(path: str, key: str) -> None:

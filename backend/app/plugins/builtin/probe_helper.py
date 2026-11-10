@@ -34,6 +34,11 @@ from pathlib import Path
 
 import numpy as np
 
+try:  # run as a script: the module next to it
+    import hf_local
+except ImportError:  # imported as part of the platform (tests)
+    from . import hf_local
+
 # ------------------------------------------------------------------ backbones
 # Each backbone turns a PIL image into a (h, w, D) feature grid.  Adding another
 # backbone only means adding a class with the same three members.
@@ -45,10 +50,10 @@ class DinoV2Backbone:
 
         self.torch = torch
         self.device = device
-        self.model = AutoModel.from_pretrained(model_id).to(device).eval()
+        self.model = hf_local.from_pretrained(AutoModel, model_id).to(device).eval()
         if device.startswith("cuda"):
             self.model = self.model.half()
-        proc = AutoImageProcessor.from_pretrained(model_id)
+        proc = hf_local.from_pretrained(AutoImageProcessor, model_id)
         self.mean = torch.tensor(proc.image_mean).view(3, 1, 1)
         self.std = torch.tensor(proc.image_std).view(3, 1, 1)
         self.patch = int(self.model.config.patch_size)
@@ -80,8 +85,8 @@ class RadioBackbone:
 
         self.torch = torch
         self.device = device
-        self.proc = CLIPImageProcessor.from_pretrained(model_id)
-        self.model = AutoModel.from_pretrained(model_id, trust_remote_code=True).to(device).eval()
+        self.proc = hf_local.from_pretrained(CLIPImageProcessor, model_id)
+        self.model = hf_local.from_pretrained(AutoModel, model_id, trust_remote_code=True).to(device).eval()
         self.patch = 16
         self.long_side = long_side
         self.key = f"{model_id}@{long_side}"

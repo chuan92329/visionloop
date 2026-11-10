@@ -15,6 +15,11 @@ import argparse
 import json
 import sys
 
+try:  # run as a script: the module next to it
+    import hf_local
+except ImportError:  # imported as part of the platform (tests)
+    from . import hf_local
+
 
 def pick_device(torch, requested: str) -> str:
     if requested in ("", "auto", None):
@@ -36,8 +41,8 @@ def run_grounding_dino(spec: dict, torch, device: str) -> None:
     from torchvision.ops import batched_nms, nms
     from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
-    processor = AutoProcessor.from_pretrained(spec["model_id"])
-    model = AutoModelForZeroShotObjectDetection.from_pretrained(spec["model_id"]).to(device).eval()
+    processor = hf_local.from_pretrained(AutoProcessor, spec["model_id"])
+    model = hf_local.from_pretrained(AutoModelForZeroShotObjectDetection, spec["model_id"]).to(device).eval()
 
     prompts = [(i, p.strip()) for i, p in enumerate(spec["prompts"]) if p and p.strip()]
     if not prompts:
