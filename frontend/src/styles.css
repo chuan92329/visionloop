@@ -1014,3 +1014,8 @@ pre.log {
   font-size: 14px;
 }
 .update-banner a.btn { text-decoration: none; }
+.update-banner.failed { border-bottom-color: var(--danger); }
+.update-error { color: var(--danger); }
+.update-progress { display: inline-flex; align-items: center; gap: 8px; }
+.update-progress .bar { width: 140px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.update-progress .bar > span { display: block; height: 100%; background: var(--st-reviewed); transition: width .3s; }

@@ -61,6 +61,7 @@ def yolo_repo(tmp_path, monkeypatch):
         data = yaml.safe_load(open(a.data))
         assert pathlib.Path(data["path"]).is_absolute(), "data path must be absolute"
         assert a.cfg == "models/detect/yolov9-s.yaml"
+        assert not a.noplots, "the charts (results.png, confusion matrix, PR curves) must be written"
         n = int(a.epochs)
         for e in range(n):
             sys.stdout.write(f"      {e}/{n-1}      1.2G      3.1      2.2      1.9        12       640: 50%|#####\\r")
@@ -103,7 +104,65 @@ def test_yolov9_status(monkeypatch, tmp_path):
     assert "train_dual.py" in yolov9_official.YoloV9Plugin().status().message
 
 
-def test_yolov9_train_and_predict(yolo_repo, tmp_path, images):
+@pytest.fixture()
+def downloads(monkeypatch):
+    """Stands in for GitHub: records what YOLOv9 fetches and writes a stub checkpoint."""
+    fetched: list[str] = []
+
+    def fake(url, dest, hooks):
+        fetched.append(url)
+        dest.write_text("pretrained")
+
+    monkeypatch.setattr(yolov9_official, "_download", fake)
+    return fetched
+
+
+def test_yolov9_downloads_the_pretrained_weights_of_the_chosen_size(yolo_repo, tmp_path, downloads):
+    rec = Recorder()
+    p = yolov9_official._pretrained(yolo_repo, "yolov9-s.pt", rec.hooks())
+    assert p == (yolo_repo / "weights" / "yolov9-s.pt").resolve() and p.exists()
+    assert downloads == [yolov9_official.RELEASE_URL + "yolov9-s.pt"]
+    yolov9_official._pretrained(yolo_repo, "yolov9-s.pt", rec.hooks())
+    assert len(downloads) == 1  # once only
+    # YOLOv9-T has no published training checkpoint: from scratch, nothing fetched
+    assert yolov9_official._pretrained(yolo_repo, "yolov9-t.pt", rec.hooks()) is None
+    assert len(downloads) == 1
+    # every size offered except T has one
+    for v in yolov9_official.YoloV9Plugin.variants:
+        assert (f"{yolov9_official._model_name(v.id)}.pt" in yolov9_official.PUBLISHED_MB) == (v.id != "t")
+
+
+def test_yolov9_stops_when_the_pretrained_weights_cannot_be_downloaded(yolo_repo, monkeypatch):
+    def offline(url, dest, hooks):
+        raise OSError("getaddrinfo failed")
+
+    monkeypatch.setattr(yolov9_official, "_download", offline)
+    with pytest.raises(RuntimeError, match="gelan-m.pt"):
+        yolov9_official._pretrained(yolo_repo, "gelan-m.pt", Recorder().hooks())
+    assert not (yolo_repo / "weights" / "gelan-m.pt").exists()
+
+
+def test_yolov9_download_leaves_no_partial_file(tmp_path, monkeypatch):
+    import urllib.request
+
+    class Broken:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n):
+            raise OSError("connection reset")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: Broken())
+    dest = tmp_path / "gelan-s.pt"
+    with pytest.raises(OSError):
+        yolov9_official._download("https://example.invalid/gelan-s.pt", dest, Recorder().hooks())
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_yolov9_train_and_predict(yolo_repo, tmp_path, images, downloads):
     rec = Recorder()
     ds = tmp_path / "ds"
     write(ds / "data.yaml", "path: .\ntrain: images/train\nval: images/valid\nnc: 2\nnames: [a, b]\n")
@@ -262,3 +321,46 @@ def test_metrics_files_missing_are_tolerated(tmp_path):
     assert rtdetr_official._read_metrics(tmp_path / "nope.txt") == {}
     (tmp_path / "log.txt").write_text("not json\n" + json.dumps({"epoch": 0}) + "\n")
     assert rtdetr_official._read_metrics(tmp_path / "log.txt") == {}
+
+
+def test_compat_restores_what_the_repo_plotting_needs(tmp_path):
+    """Pillow 10 dropped FreeTypeFont.getsize (the train/val batch images died with it), and the
+    charts need a CJK fallback font so Chinese class names are not drawn as boxes."""
+    import subprocess
+    import sys
+
+    script = tmp_path / "probe.py"
+    script.write_text(textwrap.dedent(
+        """
+        from PIL import ImageFont
+        font = ImageFont.load_default(size=12) if hasattr(ImageFont, "FreeTypeFont") else None
+        w, h = ImageFont.FreeTypeFont.getsize(font, "abc") if isinstance(font, ImageFont.FreeTypeFont) else (1, 1)
+        assert w > 0 and h > 0
+        print("ok")
+        """), encoding="utf-8")
+    compat = Path(yolov9_official.__file__).with_name("yolov9_compat.py")
+    out = subprocess.run([sys.executable, str(compat), str(script)], capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert "ok" in out.stdout
+
+
+def test_compat_cjk_fallback_survives_seaborn_reset():
+    pytest.importorskip("matplotlib")
+    seaborn = pytest.importorskip("seaborn")
+    import importlib
+
+    import matplotlib
+    from matplotlib import font_manager
+
+    compat = importlib.import_module("app.plugins.builtin.yolov9_compat")
+    installed = {f.name for f in font_manager.fontManager.ttflist}
+    available = [f for f in compat.CJK_FONTS if f in installed]
+    if not available:
+        pytest.skip("no CJK font installed here")
+    saved = matplotlib.rcParams.copy()
+    try:
+        compat._cjk_font_fallback()
+        seaborn.set(font_scale=1.0)
+        assert available[0] in matplotlib.rcParams["font.family"]
+    finally:
+        matplotlib.rcParams.update(saved)

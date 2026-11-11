@@ -1021,11 +1021,23 @@ function JobLog({ jobId, onClose }: { jobId: number; onClose: () => void }) {
 // ---------------------------------------------------------------- weights
 function WeightsRow({ w, plugin, onDelete }: { w: Weights; plugin?: PluginInfo; onDelete: () => void }) {
   const metrics = Object.entries(w.metrics).filter(([k]) => k.startsWith("mAP") || k === "precision" || k === "recall");
+  const { run, busy } = useAction();
+  const toast = useToast();
+  // the training charts (results.png, confusion matrix, PR curves...) sit next to the weights
+  const openFolder = async () => {
+    const r = await run(() => api.openRunFolder(w.id));
+    if (r) toast(r.opened ? "已開啟訓練資料夾" : `訓練圖表在：${r.path}`);
+  };
   return (
     <div className="stack" style={{ gap: 2, paddingBottom: 10, borderBottom: "1px solid var(--line)" }}>
       <div className="row">
         <b>{w.name}</b>
         <span className="spacer" />
+        {w.job_id != null && (
+          <button className="ghost" onClick={openFolder} disabled={busy} title="訓練曲線、混淆矩陣、PR 曲線和批次預覽圖都在這個資料夾">
+            開啟訓練資料夾
+          </button>
+        )}
         <button className="ghost danger" onClick={onDelete}>
           刪除
         </button>

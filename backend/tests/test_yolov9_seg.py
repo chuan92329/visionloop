@@ -41,6 +41,7 @@ def seg_repo(tmp_path, monkeypatch):
         a = ap.parse_args()
         assert pathlib.Path(yaml.safe_load(open(a.data))["path"]).is_absolute()
         assert a.cfg == "models/segment/gelan-c-seg.yaml"
+        assert not a.noplots
         assert a.img == "768"
         assert a.weights.endswith("gelan-c-seg.pt")
         out = pathlib.Path(a.project) / a.name

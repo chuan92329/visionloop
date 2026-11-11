@@ -45,9 +45,13 @@ jobs:
           name="visionloop-${GITHUB_REF_NAME}"
           git archive --format=tar --prefix="${name}/" HEAD | tar -x
           cp -r frontend/dist "${name}/frontend/dist"
+          # every file the release ships: an update removes only files listed by the previous release
+          (cd "${name}" && { find . -type f | sed 's|^\./||'; echo release_manifest.txt; } | sort -u > release_manifest.txt)
           zip -qr "${name}.zip" "${name}"
+          # the app checks the download against this before installing it
+          sha256sum "${name}.zip" | cut -d' ' -f1 > "${name}.zip.sha256"
 
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" "visionloop-${GITHUB_REF_NAME}.zip" --title "${GITHUB_REF_NAME}" --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" "visionloop-${GITHUB_REF_NAME}.zip" "visionloop-${GITHUB_REF_NAME}.zip.sha256" --title "${GITHUB_REF_NAME}" --generate-notes

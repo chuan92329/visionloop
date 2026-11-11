@@ -50,6 +50,8 @@
 </svg>
 <script>
   window.vlLeave = function () { document.body.classList.add("leave"); };
+  // shown instead of the tagline while desktop.py installs an update
+  window.vlStatus = function (text) { document.querySelector(".tag").textContent = text; };
   // desktop.py switches to the app only after this is set: the whole opening has been shown
   window.vlDone = false;
   document.querySelector(".tag").addEventListener("animationend", function () {

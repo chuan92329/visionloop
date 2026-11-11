@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import HTTPException
+import ipaddress
+
+from fastapi import HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -69,3 +71,12 @@ def project_out(db: Session, project: Project) -> ProjectOut:
         select(Image.id).where(Image.project_id == project.id).order_by(Image.id).limit(1)
     )
     return out
+
+
+def is_local_request(request: Request) -> bool:
+    """From the computer VisionLoop runs on (the desktop app), not a browser elsewhere."""
+    host = request.client.host if request.client else ""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host in ("localhost", "testclient")

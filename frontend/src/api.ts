@@ -175,6 +175,16 @@ export interface UpdateInfo {
   newer: boolean;
   url: string;
   notes: string;
+  can_install: boolean; // the desktop app installed from a release zip can update itself
+  install: UpdateStatus;
+  last: { ok: boolean; version: string; message?: string } | null; // how the last update went
+}
+
+export interface UpdateStatus {
+  state: "idle" | "downloading" | "ready" | "error";
+  version?: string;
+  progress?: number;
+  message?: string;
 }
 
 export class ApiError extends Error {
@@ -300,6 +310,10 @@ export const api = {
   job: (id: number) => request<Job>("GET", `/api/jobs/${id}`),
   cancelJob: (id: number) => request<Job>("POST", `/api/jobs/${id}/cancel`),
   updateCheck: () => request<UpdateInfo>("GET", "/api/update-check"),
+  updateDownload: () => request<UpdateStatus>("POST", "/api/update/download"),
+  updateStatus: () => request<UpdateStatus>("GET", "/api/update/status"),
+  updateRestart: () => request<{ restarting: boolean }>("POST", "/api/update/restart"),
+  updateAck: () => request<{ ok: boolean }>("POST", "/api/update/ack"),
   samInfo: () => request<{ model: string; cached: boolean; size_mb: number | null }>("GET", "/api/sam/info"),
   samPrepare: (imageId: number) => request<{ ready: boolean }>("POST", `/api/images/${imageId}/sam/prepare`),
   samSegment: (
@@ -345,6 +359,8 @@ export const api = {
   weights: (pid: number) => request<Weights[]>("GET", `/api/projects/${pid}/weights`),
   importWeights: (pid: number, fd: FormData) => request<Weights>("POST", `/api/projects/${pid}/weights/import`, fd),
   deleteWeights: (id: number) => request<void>("DELETE", `/api/weights/${id}`),
+  openRunFolder: (id: number) =>
+    request<{ path: string; opened: boolean }>("POST", `/api/weights/${id}/open-folder`),
 };
 
 export const STATUS_LABEL: Record<Status, string> = {

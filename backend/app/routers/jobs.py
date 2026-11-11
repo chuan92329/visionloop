@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -21,7 +23,7 @@ from ..schemas import AutoLabelRequest, JobDetail, JobOut, ModelWeightsOut, Trai
 from ..services.annotations import apply_boxes
 from ..services.dataset import split_stats
 from ..services.jobs import AUTOLABEL_ALLOWED, delete_job_record, next_job_id, runner
-from .common import get_project
+from .common import get_project, is_local_request
 
 router = APIRouter(prefix="/api", tags=["models"])
 
@@ -278,6 +280,49 @@ async def import_weights(
     db.add(w)
     db.commit()
     return w
+
+
+def run_folder(w: ModelWeights) -> Path | None:
+    """The folder a training run wrote its charts and logs to: the one above "weights/"."""
+    if w.job_id is None:
+        return None
+    folder = Path(w.path).resolve().parent
+    if folder.name == "weights":
+        folder = folder.parent
+    if settings.data_dir.resolve() not in folder.parents or not folder.is_dir():
+        return None
+    return folder
+
+
+def _reveal(folder: Path) -> None:
+    if sys.platform == "win32":
+        os.startfile(folder)  # type: ignore[attr-defined]
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(folder)])
+    elif shutil.which("xdg-open"):
+        subprocess.Popen(["xdg-open", str(folder)])
+    else:
+        raise OSError("no file manager")
+
+
+@router.post("/weights/{weights_id}/open-folder")
+def open_run_folder(weights_id: int, request: Request, db: Session = Depends(get_db)):
+    """Show the training charts (results.png, confusion matrix, PR curves...) in the file manager.
+    Only for the computer the platform runs on: a browser elsewhere gets the path instead."""
+    w = db.get(ModelWeights, weights_id)
+    if w is None:
+        raise HTTPException(404, "找不到權重")
+    folder = run_folder(w)
+    if folder is None:
+        raise HTTPException(404, "找不到這個權重的訓練資料夾")
+    opened = False
+    if is_local_request(request):
+        try:
+            _reveal(folder)
+            opened = True
+        except OSError:
+            pass
+    return {"path": str(folder), "opened": opened}
 
 
 @router.delete("/weights/{weights_id}", status_code=204)

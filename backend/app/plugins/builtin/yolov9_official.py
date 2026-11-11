@@ -14,9 +14,9 @@ Setup
     export VISIONLOOP_YOLOV9_REPO=/path/to/yolov9
     export VISIONLOOP_YOLOV9_PYTHON=/path/to/venv/bin/python   # optional
 
-Optional pretrained weights for fine-tuning: put e.g. ``yolov9-c.pt`` or
-``gelan-c.pt`` in ``$VISIONLOOP_YOLOV9_REPO/weights/``; it is used automatically for the
-matching size.  Without it the model trains from scratch.
+Pretrained weights for fine-tuning (e.g. ``yolov9-c.pt``, ``gelan-s.pt``) are taken from
+``$VISIONLOOP_YOLOV9_REPO/weights/`` and downloaded there from the authors' release on first
+use of a size.  YOLOv9-T has none published and trains from scratch.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ class YoloV9Plugin(ModelPlugin):
     # Smallest first. The form recommends the last size that fits the GPU, so at each size YOLOv9
     # comes after GELAN. VRAM of GELAN is an upper bound: without the auxiliary branch it needs less.
     variants = [
-        Variant("t", "YOLOv9-T", "最輕量，適合 4GB 以下顯卡或 CPU 測試", 2, 2.0),
+        Variant("t", "YOLOv9-T", "最輕量，沒有官方預訓練權重（從頭訓練，需要大量資料）", 2, 2.0),
         Variant("gelan-s", "GELAN-S", "小型，沒有輔助分支", 4),
         Variant("s", "YOLOv9-S", "小型，速度與準確度平衡", 4, 7.1),
         Variant("gelan-m", "GELAN-M", "中型，沒有輔助分支", 6),
@@ -109,11 +109,11 @@ class YoloV9Plugin(ModelPlugin):
         data["path"] = str(ctx.dataset_dir.resolve())  # the repo resolves relative paths against itself
         data_yaml.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
-        init = ctx.init_weights or _find_pretrained(repo, v)
+        init = ctx.init_weights or _pretrained(repo, f"{_model_name(v)}.pt", hooks)
         if init:
             hooks.log(f"初始權重：{init}")
         else:
-            hooks.log("找不到預訓練權重，將從頭開始訓練（資料少時效果會差很多）")
+            hooks.log(f"{_model_name(v)} 沒有官方預訓練權重，將從頭開始訓練（資料少時效果會差很多，建議改用 S 以上的尺寸）")
 
         close_mosaic = min(15, ctx.epochs // 2)
         cmd = [
@@ -135,7 +135,7 @@ class YoloV9Plugin(ModelPlugin):
             "--name", "train",
             "--exist-ok",
         ]
-        if ctx.extra.get("noplots", True):
+        if ctx.extra.get("noplots", False):  # the charts (results.png, confusion matrix, PR curves) are on by default
             cmd.append("--noplots")
 
         total = ctx.epochs
@@ -231,12 +231,8 @@ class YoloV9SegPlugin(ModelPlugin):
         data["path"] = str(ctx.dataset_dir.resolve())  # the repo resolves relative paths against itself
         data_yaml.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
-        pretrained = repo / "weights" / "gelan-c-seg.pt"
-        init = ctx.init_weights or (pretrained.resolve() if pretrained.exists() else None)
-        if init:
-            hooks.log(f"初始權重：{init}")
-        else:
-            hooks.log("找不到 weights/gelan-c-seg.pt，將從頭開始訓練（資料少時效果會差很多）")
+        init = ctx.init_weights or _pretrained(repo, "gelan-c-seg.pt", hooks)
+        hooks.log(f"初始權重：{init}")
 
         cmd = [
             python_executable("VISIONLOOP_YOLOV9_PYTHON"),
@@ -256,8 +252,9 @@ class YoloV9SegPlugin(ModelPlugin):
             "--project", str(ctx.output_dir),
             "--name", "train",
             "--exist-ok",
-            "--noplots",
         ]
+        if ctx.extra.get("noplots", False):
+            cmd.append("--noplots")
 
         def on_line(line: str) -> None:
             m = EPOCH_RX.match(line)
@@ -347,12 +344,54 @@ def _model_name(variant: str) -> str:
     return variant if _is_gelan(variant) else f"yolov9-{variant}"
 
 
-def _find_pretrained(repo: Path, variant: str) -> Path | None:
-    for folder in (repo / "weights", repo):
-        p = folder / f"{_model_name(variant)}.pt"
+# Training checkpoints the authors publish (with the auxiliary branch, so train_dual.py can fine-tune
+# them), in MB. YOLOv9-T only has a converted (inference) checkpoint, so it trains from scratch.
+RELEASE_URL = "https://github.com/WongKinYiu/yolov9/releases/download/v0.1/"
+PUBLISHED_MB = {
+    "yolov9-s.pt": 19, "yolov9-m.pt": 63, "yolov9-c.pt": 98, "yolov9-e.pt": 133,
+    "gelan-s.pt": 14, "gelan-m.pt": 38, "gelan-c.pt": 49, "gelan-e.pt": 111,
+    "gelan-c-seg.pt": 53,
+}
+
+
+def _download(url: str, dest: Path, hooks) -> None:
+    """Fetches ``url`` to ``dest`` through a temporary file, so an interrupted download leaves nothing."""
+    import urllib.request
+
+    part = dest.with_name(dest.name + ".part")
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r, part.open("wb") as f:
+            while chunk := r.read(1 << 20):
+                hooks.check_cancel()
+                f.write(chunk)
+        part.replace(dest)
+    finally:
+        part.unlink(missing_ok=True)
+
+
+def _pretrained(repo: Path, name: str, hooks) -> Path | None:
+    """The authors' pretrained checkpoint ``name``, downloaded into ``repo/weights`` on first use.
+
+    Without one, a few hundred labelled images train to a mAP of about 0, so a failed download
+    stops the job instead of silently training from scratch.
+    """
+    for p in (repo / "weights" / name, repo / name):
         if p.exists():
             return p.resolve()
-    return None
+    if name not in PUBLISHED_MB:
+        return None
+    dest = repo / "weights" / name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    hooks.progress(0.0, f"第一次使用，正在下載 {name}（約 {PUBLISHED_MB[name]} MB）…")
+    hooks.log(f"下載預訓練權重 {RELEASE_URL}{name}")
+    try:
+        _download(RELEASE_URL + name, dest, hooks)
+    except OSError as exc:
+        raise RuntimeError(
+            f"無法下載預訓練權重 {name}（{exc}）。沒有它從頭訓練，資料少時 mAP 幾乎是 0。"
+            f"請確認網路可以連到 github.com 後重試，或手動下載 {RELEASE_URL}{name} 放到 {dest.parent}"
+        ) from exc
+    return dest.resolve()
 
 
 def _link(src: Path, dst: Path) -> None:

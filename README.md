@@ -34,7 +34,7 @@ flowchart LR
    過程中會下載預設的模型權重（約 2～3 GB），並詢問是否下載 YOLOv9 / GELAN（GPL-3.0 授權）。沒有 NVIDIA 顯示卡、只需要標註時，加上 `-SkipModels`。
 5. **開始使用**：雙擊桌面上的 **VisionLoop**。第一次開啟會出現導覽，帶你走一遍完整流程。
 
-之後只要雙擊捷徑即可。有新版本時，畫面上方會出現提示（每天最多向 GitHub 查詢一次版本號，不會傳送任何專案資料；沒有網路時自動略過，在 `local_settings.json` 加上 `"check_updates": false` 可以關閉）。更新版本時，用新的 zip 覆蓋程式檔即可，專案與圖片都在 `data/` 資料夾，請勿刪除。詳細說明與其他系統見[快速開始](#快速開始)。
+之後只要雙擊捷徑即可。有新版本時，畫面上方會出現提示（每天最多向 GitHub 查詢一次版本號，不會傳送任何專案資料；沒有網路時自動略過，在 `local_settings.json` 加上 `"check_updates": false` 可以關閉）。用桌面捷徑開啟時可以直接在程式裡更新：按「立即更新」會在背景下載並核對檔案，下載完按「重新啟動並更新」，VisionLoop 會換上新版本後自動重新開啟（還有任務在執行時會先等它完成）。更新前會備份舊版程式，新版本無法啟動時自動還原；專案、圖片、權重都在 `data/` 資料夾，`models/`、`local_settings.json` 和自己加的外掛也一樣，更新不會動到。v0.1.3 以前的版本沒有這個功能，請手動下載一次新的 zip 覆蓋程式檔（`data/` 請勿刪除）；用 git 取得原始碼的請用 `git pull`。詳細說明與其他系統見[快速開始](#快速開始)。
 
 ## 功能
 
@@ -209,7 +209,9 @@ export VISIONLOOP_YOLOV9_REPO=$PWD/yolov9
 export VISIONLOOP_YOLOV9_PYTHON=$PWD/yolov9-env/bin/python
 ```
 
-要從預訓練權重微調，把 `yolov9-s.pt`、`yolov9-c.pt`、`gelan-c.pt` 等檔案放在 `yolov9/weights/`，訓練時會自動使用對應尺寸的權重。
+訓練時會用對應尺寸的官方預訓練權重微調（`yolov9/weights/` 裡的 `yolov9-s.pt`、`gelan-c.pt` 等）；第一次用某個尺寸時會自動從原作者的 Release 下載，下載失敗時任務會停下並說明，不會默默從頭訓練。YOLOv9-T 沒有官方預訓練權重，只能從頭訓練，資料少時建議用 S 以上的尺寸。
+
+訓練完成後，訓練曲線（`results.png`）、混淆矩陣、PR / P / R / F1 曲線、標註統計，以及訓練與驗證批次的預覽圖，都存在 `data\runs\job_編號\output\train\` 裡（分割模型另外有 Box / Mask 兩組曲線）。在「自動標註與訓練」頁的「權重」列表按「開啟訓練資料夾」，就會直接在檔案總管打開這個資料夾。
 
 **RT-DETRv2**（[lyuwenyu/RT-DETR](https://github.com/lyuwenyu/RT-DETR)，Apache-2.0）
 

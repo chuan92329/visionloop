@@ -5,6 +5,9 @@
 The API server runs in a background thread of this process, bound to 127.0.0.1 only, and the
 window shows the same web UI through the system web view (Edge WebView2 on Windows). Closing the
 window stops the server, the job runner and the click-to-segment helper.
+
+An update downloaded in the app is installed here, behind the splash, before anything else is
+loaded; VisionLoop then starts again to run it (see backend/app/services/self_update.py).
 """
 
 from __future__ import annotations
@@ -139,14 +142,25 @@ class Boot:
     def __init__(self) -> None:
         self.server = None
         self.thread: threading.Thread | None = None
+        self.window = None
+        self.restart = False  # start VisionLoop again once this window has closed
 
     def __call__(self, window) -> None:
         shown = time.time()
+        self.window = window
         try:
+            if self.install_update():
+                self.relaunch()
+                return
             url = self.start_server()
-        except RuntimeError as exc:
-            window.load_html(error_html(str(exc)))
+        except Exception as exc:  # noqa: BLE001 - shown in the window, there is no console
+            if self.undo_update(exc):
+                self.relaunch()
+                return
+            text = str(exc) if isinstance(exc, RuntimeError) else f"{type(exc).__name__}: {exc}"
+            window.load_html(error_html(text))
             return
+        self.update_started()
         # the server is ready; now wait for the opening animation to finish as well
         while time.time() - shown < SPLASH_LIMIT:
             try:
@@ -161,6 +175,46 @@ class Boot:
         except Exception:  # noqa: BLE001 - the fade is only cosmetic
             pass
         window.load_url(url)
+
+    # ---------------------------------------------------------- updates
+    def install_update(self) -> bool:
+        """Install a downloaded update while nothing is loaded yet. True: start again to run it."""
+        if running_visionloop(PREFERRED_PORT):  # another window uses these files right now
+            return False
+        from app.config import settings
+        from app.services import self_update
+
+        settings.ensure_dirs()
+        if not self_update.pending_path(settings.data_dir).exists():
+            return False
+        try:
+            self.window.evaluate_js("window.vlStatus && window.vlStatus('正在安裝更新，請稍候…')")
+        except Exception:  # noqa: BLE001 - the text is only a courtesy
+            pass
+        return self_update.install_pending(ROOT, settings.data_dir, settings.data_dir / "visionloop.log")
+
+    def undo_update(self, exc: BaseException) -> bool:
+        """The first start after an update failed: put the previous version back."""
+        try:
+            from app.config import settings
+            from app.services import self_update
+
+            return self_update.undo_failed_start(ROOT, settings.data_dir, str(exc) or type(exc).__name__)
+        except Exception:  # noqa: BLE001 - nothing more can be done from here
+            return False
+
+    def update_started(self) -> None:
+        if self.server is None:  # showing another window's server
+            return
+        from app.config import settings
+        from app.services import self_update
+
+        self_update.confirm_started(settings.data_dir)
+        self_update.restart_hook = self.relaunch  # the app's "restart and update" button
+
+    def relaunch(self) -> None:
+        self.restart = True
+        self.window.destroy()
 
     def start_server(self) -> str:
         # Another VisionLoop is already serving this data folder: show it, never start a second
@@ -231,6 +285,9 @@ def main() -> None:
     boot = Boot()
     webview.start(boot, window)  # boot runs in its own thread; start() returns when the window closes
     boot.stop()
+    if boot.restart:  # the server has stopped: the new process may use the port and the files
+        subprocess.Popen([sys.executable, "-X", "utf8", str(Path(__file__).resolve())], cwd=str(ROOT),
+                         creationflags=NO_WINDOW)
 
 
 if __name__ == "__main__":
