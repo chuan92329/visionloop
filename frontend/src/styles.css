@@ -689,6 +689,12 @@ pre.log {
   margin-top: auto;
   flex-wrap: wrap;
 }
+.advanced summary {
+  cursor: pointer;
+}
+.advanced[open] summary {
+  margin-bottom: 12px;
+}
 .field-group {
   display: grid;
   gap: 6px;

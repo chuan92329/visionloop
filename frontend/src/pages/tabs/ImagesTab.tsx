@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, STATUS_LABEL, type ImageInfo, type ImageQuery, type PluginInfo, type Project, type Status } from "../../api";
 import { Modal, Progress, useAction, useToast } from "../../components/ui";
 import { queryFromSearch, searchFromQuery } from "../../query";
+import { OutlineOptions, type PolygonDetail } from "./jobParts";
 
 const PAGE = 120;
 const UPLOAD_CHUNK = 16;
@@ -351,7 +352,7 @@ function OutlineModal({
 }) {
   const [plugin, setPlugin] = useState<PluginInfo | null | undefined>(undefined);
   const [variant, setVariant] = useState("");
-  const [detail, setDetail] = useState<"normal" | "fine">("normal");
+  const [detail, setDetail] = useState<PolygonDetail>("normal");
   const [overwrite, setOverwrite] = useState(false);
   const { busy, run } = useAction();
 
@@ -383,7 +384,7 @@ function OutlineModal({
           overwrite_polygons: overwrite,
           device: "auto",
         }),
-      "已開始轉換，可到「自動標註與訓練」頁查看進度",
+      "已開始轉換，可到「輔助標註」頁查看進度",
     );
     if (job) onDone();
   };
@@ -406,30 +407,16 @@ function OutlineModal({
       {plugin === null && <p className="warning small">SAM 2 目前無法使用，請確認模型環境已安裝。</p>}
       <p className="muted small">由 SAM 2 依照既有的框描出物件輪廓。轉換失敗的框會保留原狀。</p>
       {plugin && (
-        <label className="field">
-          尺寸
-          <select value={variant} onChange={(e) => setVariant(e.target.value)}>
-            {plugin.variants.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-                {v.description ? `（${v.description}）` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <OutlineOptions
+          plugin={plugin}
+          variant={variant}
+          onVariant={setVariant}
+          detail={detail}
+          onDetail={setDetail}
+          overwrite={overwrite}
+          onOverwrite={setOverwrite}
+        />
       )}
-      <label className="field">
-        輪廓點數
-        <select value={detail} onChange={(e) => setDetail(e.target.value as "normal" | "fine")}>
-          <option value="normal">標準（12MP 照片約 80 點）</option>
-          <option value="fine">密集（12MP 照片約 250 點，手動調整較不方便）</option>
-        </select>
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
-        重新描繪已經有多邊形的物件
-      </label>
-      {overwrite && <p className="warning small">現有的多邊形會被取代，包含你手動調整過的。舊版本保留在版本紀錄裡，可以逐張還原。</p>}
       {withBoxes.length < images.length && <p className="small muted">選取的圖片中有 {images.length - withBoxes.length} 張沒有框，會略過。</p>}
       {reviewed > 0 && (
         <p className="warning small">其中 {reviewed} 張已確認的圖片轉換後會變回「自動標註」，要重新確認才會進入訓練資料。原本的框保留在版本紀錄裡，可以還原。</p>

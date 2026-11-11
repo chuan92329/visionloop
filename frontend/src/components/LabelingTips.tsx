@@ -40,7 +40,7 @@ export default function LabelingTips({ onClose }: { onClose: () => void }) {
           <h3>一圈一圈來</h3>
           <ol className="small">
             <li>每個類別先手動標 3～5 個框，按「確認」。</li>
-            <li>到「訓練」跑一次初步標註（Linear Probe），讓模型框剩下的圖。</li>
+            <li>到「輔助標註」跑一次初步標註（Linear Probe），讓模型框剩下的圖。</li>
             <li>回來審核：只改錯的、補漏的，按 Enter 下一張。</li>
             <li>每多確認一批就再跑一次；累積約 50 張後訓練 YOLO 或 RF-DETR，之後用它標註。</li>
           </ol>

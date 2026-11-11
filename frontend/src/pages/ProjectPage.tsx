@@ -7,12 +7,14 @@ import ImagesTab from "./tabs/ImagesTab";
 import ClassesTab from "./tabs/ClassesTab";
 import SplitTab from "./tabs/SplitTab";
 import ModelsTab from "./tabs/ModelsTab";
+import AssistTab from "./tabs/AssistTab";
 
 const TABS = [
   { id: "images", label: "圖片" },
   { id: "classes", label: "類別" },
+  { id: "assist", label: "輔助標註" },
   { id: "split", label: "資料切分與匯出" },
-  { id: "models", label: "自動標註與訓練" },
+  { id: "models", label: "訓練與權重" },
 ] as const;
 
 export default function ProjectPage() {
@@ -71,6 +73,7 @@ export default function ProjectPage() {
 
         {tab === "images" && <ImagesTab project={project} onChanged={reload} />}
         {tab === "classes" && <ClassesTab project={project} onChanged={reload} />}
+        {tab === "assist" && <AssistTab project={project} onChanged={reload} />}
         {tab === "split" && <SplitTab project={project} onChanged={reload} />}
         {tab === "models" && <ModelsTab project={project} onChanged={reload} />}
       </main>

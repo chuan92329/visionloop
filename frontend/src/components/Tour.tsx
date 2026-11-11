@@ -8,7 +8,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 
-type Page = "projects" | "images" | "annotate" | "models" | "split";
+type Page = "projects" | "images" | "annotate" | "assist" | "models" | "split";
 
 interface TourStep {
   page?: Page; // where the step lives; none = stay where the tour is
@@ -65,10 +65,10 @@ export const TOUR_STEPS: TourStep[] = [
     body: "標完按 Enter 確認並跳下一張。不用一開始就標很多，下一步讓模型幫你。",
   },
   {
-    page: "models",
-    target: "train",
+    page: "assist",
+    target: "probe",
     title: "4. 初步標註",
-    body: "「訓練目的」選「初步標註（Linear Probe）」，用你確認過的幾張圖訓練幾秒鐘，就能幫你框剩下的圖片。每多確認一批，再跑一次會更準。",
+    body: "在「輔助標註」頁按「開始初步標註」，用你確認過的幾張圖訓練幾秒鐘，就能幫你框剩下的圖片。每多確認一批，再跑一次會更準。",
   },
   {
     page: "annotate",
@@ -80,13 +80,13 @@ export const TOUR_STEPS: TourStep[] = [
     page: "split",
     target: "split",
     title: "6. 資料夠了就訓練正式模型",
-    body: "累積約 50 張已確認的圖片後，在這裡分好 train / valid / test，再到「訓練」選「正式模型」訓練 YOLO 或 RF-DETR。",
+    body: "累積約 50 張已確認的圖片後，在這裡分好 train / valid / test，再到「訓練與權重」頁訓練 YOLO 或 RF-DETR。",
   },
   {
-    page: "models",
+    page: "assist",
     target: "autolabel",
     title: "7. 用你的模型標下一批",
-    body: "訓練好的權重會出現在這裡，用它自動標註新圖片，再回去審核。一圈一圈下去，模型越準，要改的越少。",
+    body: "訓練好的權重會出現在這裡的「權重」選單，用它自動標註新圖片，再回去審核。一圈一圈下去，模型越準，要改的越少。",
   },
   {
     title: "就是這樣！",
