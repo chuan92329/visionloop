@@ -139,7 +139,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1   # 第一次
 
 ### macOS / Linux
 
-需要 Python 3.10+ 與 Node.js 18+。
+需要 Python 3.10+ 與 Node.js 22.12+。
 
 ```bash
 git clone https://github.com/chuan92329/visionloop.git
