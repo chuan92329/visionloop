@@ -9,13 +9,36 @@ const PAGE = 120;
 const UPLOAD_CHUNK = 16;
 const STATUS_FILTERS: (Status | "all")[] = ["all", "unlabeled", "auto", "in_progress", "reviewed"];
 
+// The selection stays while the user opens a photo, comes back, pages or filters; only
+// "取消選取" (or deleting the images) clears it. Kept per project for this browser tab.
+type Selection = Map<number, ImageInfo | null>; // null: selected, but not seen since a reload
+const selectionKey = (pid: number) => `vl-selected-${pid}`;
+
+function loadSelection(pid: number): Selection {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(selectionKey(pid)) || "[]") as [number, ImageInfo | null][];
+    return new Map(saved);
+  } catch {
+    return new Map();
+  }
+}
+
+function saveSelection(pid: number, sel: Selection) {
+  try {
+    if (sel.size) sessionStorage.setItem(selectionKey(pid), JSON.stringify([...sel]));
+    else sessionStorage.removeItem(selectionKey(pid));
+  } catch {
+    /* storage unavailable: the selection lasts until the page is left */
+  }
+}
+
 export default function ImagesTab({ project, onChanged }: { project: Project; onChanged: () => void }) {
   const [sp, setSp] = useSearchParams();
   const query = queryFromSearch(sp);
   const queryKey = sp.toString();
   const [items, setItems] = useState<ImageInfo[]>([]);
   const [total, setTotal] = useState(0);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Selection>(() => loadSelection(project.id));
   const [upload, setUpload] = useState<{ done: number; total: number } | null>(null);
   const [groupModal, setGroupModal] = useState(false);
   const [outlineModal, setOutlineModal] = useState(false);
@@ -28,15 +51,23 @@ export default function ImagesTab({ project, onChanged }: { project: Project; on
       const page = await run(() => api.images(project.id, { ...queryFromSearch(new URLSearchParams(queryKey)), offset, limit: PAGE }));
       if (!page) return;
       setTotal(page.total);
+      // refresh what is known about selected images that are on this page
+      setSelected((s) => {
+        if (!page.items.some((i) => s.has(i.id))) return s;
+        const n = new Map(s);
+        for (const i of page.items) if (n.has(i.id)) n.set(i.id, i);
+        return n;
+      });
       setItems((prev) => (offset === 0 ? page.items : [...prev, ...page.items]));
     },
     [project.id, queryKey, run],
   );
 
   useEffect(() => {
-    setSelected(new Set());
     load(0);
   }, [load]);
+
+  useEffect(() => saveSelection(project.id, selected), [project.id, selected]);
 
   const setQuery = (patch: Partial<ImageQuery>) => {
     const next = { ...query, ...patch };
@@ -72,18 +103,25 @@ export default function ImagesTab({ project, onChanged }: { project: Project; on
   };
 
   // ------------------------------------------------------------- selection
-  const toggle = (id: number) =>
+  const toggle = (img: ImageInfo) =>
     setSelected((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
+      const n = new Map(s);
+      if (n.has(img.id)) n.delete(img.id);
+      else n.set(img.id, img);
       return n;
     });
+  const selectPage = () =>
+    setSelected((s) => {
+      const n = new Map(s);
+      for (const i of items) n.set(i.id, i);
+      return n;
+    });
+  const offPage = [...selected.keys()].filter((id) => !items.some((i) => i.id === id)).length;
 
   const removeSelected = async () => {
     if (!confirm(`確定刪除 ${selected.size} 張圖片和它們的標註？此動作無法復原。`)) return;
-    if (await run(() => api.deleteImages(project.id, [...selected]), `已刪除 ${selected.size} 張圖片`)) {
-      setSelected(new Set());
+    if (await run(() => api.deleteImages(project.id, [...selected.keys()]), `已刪除 ${selected.size} 張圖片`)) {
+      setSelected(new Map());
       load(0);
       onChanged();
     }
@@ -155,11 +193,14 @@ export default function ImagesTab({ project, onChanged }: { project: Project; on
 
       {selected.size > 0 && (
         <div className="row panel" style={{ padding: "8px 12px" }}>
-          <span>已選 {selected.size} 張</span>
-          <button className="ghost" onClick={() => setSelected(new Set(items.map((i) => i.id)))}>
+          <span>
+            已選 {selected.size} 張
+            {offPage > 0 && <span className="muted small">（其中 {offPage} 張不在目前畫面）</span>}
+          </span>
+          <button className="ghost" onClick={selectPage}>
             全選這頁
           </button>
-          <button className="ghost" onClick={() => setSelected(new Set())}>
+          <button className="ghost" onClick={() => setSelected(new Map())}>
             取消選取
           </button>
           <span className="spacer" />
@@ -189,7 +230,7 @@ export default function ImagesTab({ project, onChanged }: { project: Project; on
 
       <div className="grid">
         {items.map((img) => (
-          <Tile key={img.id} img={img} href={href(img.id)} selected={selected.has(img.id)} onToggle={() => toggle(img.id)} />
+          <Tile key={img.id} img={img} href={href(img.id)} selected={selected.has(img.id)} onToggle={() => toggle(img)} />
         ))}
       </div>
 
@@ -204,19 +245,17 @@ export default function ImagesTab({ project, onChanged }: { project: Project; on
       {outlineModal && (
         <OutlineModal
           projectId={project.id}
-          images={items.filter((i) => selected.has(i.id))}
+          ids={[...selected.keys()]}
+          known={[...selected.values()].filter((i): i is ImageInfo => i !== null)}
           onClose={() => setOutlineModal(false)}
-          onDone={() => {
-            setOutlineModal(false);
-            setSelected(new Set());
-          }}
+          onDone={() => setOutlineModal(false)}
         />
       )}
 
       {groupModal && (
         <GroupModal
           projectId={project.id}
-          ids={[...selected]}
+          ids={[...selected.keys()]}
           onClose={() => setGroupModal(false)}
           onDone={() => {
             setGroupModal(false);
@@ -341,12 +380,14 @@ async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
 
 function OutlineModal({
   projectId,
-  images,
+  ids,
+  known,
   onClose,
   onDone,
 }: {
   projectId: number;
-  images: ImageInfo[];
+  ids: number[];
+  known: ImageInfo[]; // what the list last showed of them; images without boxes are skipped anyway
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -367,8 +408,9 @@ function OutlineModal({
       .catch(() => setPlugin(null));
   }, []);
 
-  const withBoxes = images.filter((i) => i.box_count > 0);
-  const reviewed = withBoxes.filter((i) => i.status === "reviewed").length;
+  const noBoxes = new Set(known.filter((i) => i.box_count === 0).map((i) => i.id));
+  const withBoxes = ids.filter((id) => !noBoxes.has(id));
+  const reviewed = known.filter((i) => i.box_count > 0 && i.status === "reviewed").length;
 
   const start = async () => {
     if (!plugin) return;
@@ -379,7 +421,7 @@ function OutlineModal({
           variant,
           confidence: 0,
           statuses: [],
-          image_ids: withBoxes.map((i) => i.id),
+          image_ids: withBoxes,
           polygon_detail: detail,
           overwrite_polygons: overwrite,
           device: "auto",
@@ -417,7 +459,7 @@ function OutlineModal({
           onOverwrite={setOverwrite}
         />
       )}
-      {withBoxes.length < images.length && <p className="small muted">選取的圖片中有 {images.length - withBoxes.length} 張沒有框，會略過。</p>}
+      {noBoxes.size > 0 && <p className="small muted">選取的圖片中有 {noBoxes.size} 張沒有框，會略過。</p>}
       {reviewed > 0 && (
         <p className="warning small">其中 {reviewed} 張已確認的圖片轉換後會變回「自動標註」，要重新確認才會進入訓練資料。原本的框保留在版本紀錄裡，可以還原。</p>
       )}

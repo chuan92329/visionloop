@@ -359,6 +359,9 @@ export const api = {
   weights: (pid: number) => request<Weights[]>("GET", `/api/projects/${pid}/weights`),
   importWeights: (pid: number, fd: FormData) => request<Weights>("POST", `/api/projects/${pid}/weights/import`, fd),
   deleteWeights: (id: number) => request<void>("DELETE", `/api/weights/${id}`),
+  openPredictions: (jobId: number) =>
+    request<{ path: string; opened: boolean }>("POST", `/api/jobs/${jobId}/open-predictions`),
+  predictionsUrl: (jobId: number) => `/api/jobs/${jobId}/predictions.zip`,
   openRunFolder: (id: number) =>
     request<{ path: string; opened: boolean }>("POST", `/api/weights/${id}/open-folder`),
 };

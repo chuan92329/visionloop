@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, STATUS_LABEL, type Job, type PluginInfo, type Project, type Status, type Weights } from "../../api";
-import { Progress, timeAgo } from "../../components/ui";
+import { Progress, timeAgo, useAction, useToast } from "../../components/ui";
 
 export const JOB_STATUS: Record<Job["status"], string> = {
   queued: "排隊中",
@@ -82,6 +82,14 @@ export function JobRow({
   onDelete: () => void;
 }) {
   const name = plugins.find((p) => p.id === job.plugin)?.name ?? job.plugin;
+  // a model's labeling job keeps its predictions: drawn images and YOLO txt files
+  const predicted = typeof job.result?.predict_dir === "string" ? Number(job.result.predicted_images ?? 0) : 0;
+  const { run, busy } = useAction();
+  const toast = useToast();
+  const openPredictions = async () => {
+    const r = await run(() => api.openPredictions(job.id));
+    if (r) toast(r.opened ? "已開啟推論結果資料夾" : `推論結果在：${r.path}`);
+  };
   const live = job.status === "queued" || job.status === "running";
   const color = { succeeded: "st-reviewed", failed: "", cancelled: "st-unlabeled", running: "st-in_progress", queued: "st-unlabeled" }[job.status];
   return (
@@ -102,6 +110,16 @@ export function JobRow({
       </div>
       <div>{live ? <Progress value={job.progress} kind={job.kind === "autolabel" ? "auto" : undefined} /> : null}</div>
       <div className="row">
+        {predicted > 0 && (
+          <>
+            <button className="ghost" onClick={openPredictions} disabled={busy} title={`${predicted} 張畫好框的圖，和不含信心分數的 YOLO 標籤檔`}>
+              開啟推論結果
+            </button>
+            <a className="btn ghost" href={api.predictionsUrl(job.id)} download title="images/、labels/（YOLO 格式）、classes.txt">
+              下載
+            </a>
+          </>
+        )}
         <button className="ghost" onClick={onLog}>
           紀錄
         </button>

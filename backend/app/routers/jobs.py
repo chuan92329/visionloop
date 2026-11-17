@@ -5,11 +5,13 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -23,6 +25,7 @@ from ..schemas import AutoLabelRequest, JobDetail, JobOut, ModelWeightsOut, Trai
 from ..services.annotations import apply_boxes
 from ..services.dataset import split_stats
 from ..services.jobs import AUTOLABEL_ALLOWED, delete_job_record, next_job_id, runner
+from ..services.predictions import predict_folder, zip_folder
 from .common import get_project, is_local_request
 
 router = APIRouter(prefix="/api", tags=["models"])
@@ -323,6 +326,39 @@ def open_run_folder(weights_id: int, request: Request, db: Session = Depends(get
         except OSError:
             pass
     return {"path": str(folder), "opened": opened}
+
+
+def _job_predictions(db: Session, job_id: int) -> Path:
+    job = db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(404, "找不到任務")
+    folder = predict_folder(job.result)
+    if folder is None:
+        raise HTTPException(404, "這個任務沒有推論結果")
+    return folder
+
+
+@router.post("/jobs/{job_id}/open-predictions")
+def open_predictions(job_id: int, request: Request, db: Session = Depends(get_db)):
+    """Show the images with the model's boxes drawn on them, and the YOLO txt files."""
+    folder = _job_predictions(db, job_id)
+    opened = False
+    if is_local_request(request):
+        try:
+            _reveal(folder)
+            opened = True
+        except OSError:
+            pass
+    return {"path": str(folder), "opened": opened}
+
+
+@router.get("/jobs/{job_id}/predictions.zip")
+def download_predictions(job_id: int, background: BackgroundTasks, db: Session = Depends(get_db)):
+    folder = _job_predictions(db, job_id)
+    tmp = Path(tempfile.mkdtemp(prefix="visionloop-predict-"))
+    zip_folder(folder, tmp / "predict.zip")
+    background.add_task(shutil.rmtree, tmp, True)
+    return FileResponse(tmp / "predict.zip", media_type="application/zip", filename=f"job_{job_id}_predictions.zip")
 
 
 @router.delete("/weights/{weights_id}", status_code=204)

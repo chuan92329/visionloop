@@ -37,6 +37,7 @@ from ..plugins import registry
 from ..plugins.base import Cancelled, Exemplar, JobHooks, PredictContext, ReviewedImage, TrainContext
 from . import dataset, storage
 from .annotations import Box, apply_boxes
+from .predictions import PREDICT_DIR, PredictedBox, PredictionWriter
 
 log = logging.getLogger(__name__)
 
@@ -315,10 +316,16 @@ def _autolabel(project_id: int, plugin, params: dict, work_dir: Path, hooks: _Ho
         else:
             statuses = [s for s in params.get("statuses", [STATUS_UNLABELED]) if s in AUTOLABEL_ALLOWED]
             stmt = stmt.where(Image.status.in_(statuses or [STATUS_UNLABELED]))
-        targets = {
-            str(storage.image_path(project_id, img.stored_name)): (img.id, img.version)
-            for img in db.scalars(stmt.order_by(Image.id))
-        }
+        targets = {}
+        stems = {}
+        for img in db.scalars(stmt.order_by(Image.id)):
+            path = str(storage.image_path(project_id, img.stored_name))
+            targets[path] = (img.id, img.version)
+            stems[path] = Path(dataset.export_filename(img)).stem
+        class_index = {c.id: i for i, c in enumerate(classes)}
+        # a first pass from confirmed examples is a rough draft, not a model's prediction to keep
+        initial = plugin.uses_reviewed_images and not plugin.trainable
+        writer = None if initial else PredictionWriter(work_dir, [c.name for c in classes], [c.color for c in classes])
         weights_path = Path(weights.path) if weights else None
         variant = weights.variant if weights else params.get("variant")
         image_size = int((weights.metrics or {}).get("train_image_size", 640)) if weights else 640
@@ -362,6 +369,13 @@ def _autolabel(project_id: int, plugin, params: dict, work_dir: Path, hooks: _Ho
             for p in preds
             if (cid := to_class_id(p)) is not None
         ]
+        if writer is not None:
+            try:
+                writer.add(path, stems[str(path)], [
+                    PredictedBox(class_index[b.class_id], b.x, b.y, b.w, b.h, b.score or 0.0, b.polygon) for b in boxes
+                ])
+            except Exception as exc:  # the labels still go in; only this picture is missing
+                hooks.log(f"無法輸出 {path.name} 的推論結果圖：{exc}")
         with SessionLocal() as db:
             img = db.get(Image, img_id)
             # someone may have started editing while the job was running – never clobber that
@@ -374,7 +388,7 @@ def _autolabel(project_id: int, plugin, params: dict, work_dir: Path, hooks: _Ho
         done += 1
         hooks.progress(done / len(paths), f"自動標註 {done}/{len(paths)}")
 
-    shutil.rmtree(work_dir, ignore_errors=True)
+    _keep_only(work_dir, PREDICT_DIR if writer is not None and writer.count else None)
     summary = f"完成 {done - skipped} 張，共 {boxes_total} 個框"
     if skipped:
         summary += f"；{skipped} 張在執行期間被人工修改，已略過"
@@ -383,7 +397,25 @@ def _autolabel(project_id: int, plugin, params: dict, work_dir: Path, hooks: _Ho
         hooks.log("模型偵測到、但專案中沒有的類別：" + "、".join(f"{k}（{v}）" for k, v in top))
         if boxes_total == 0:
             summary += "；模型找到的類別名稱都不在專案中（例如 " + "、".join(k for k, _ in top[:3]) + "）"
-    return {"summary": summary, "labelled": done - skipped, "boxes": boxes_total, "skipped": skipped}
+    result = {"summary": summary, "labelled": done - skipped, "boxes": boxes_total, "skipped": skipped}
+    if writer is not None and writer.count:
+        result["predict_dir"] = work_dir.name
+        result["predicted_images"] = writer.count
+    return result
+
+
+def _keep_only(work_dir: Path, keep: str | None) -> None:
+    """Remove the job's scratch files; ``keep`` names the one entry to leave (or none: all go)."""
+    if keep is None:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        return
+    for entry in work_dir.iterdir():
+        if entry.name == keep:
+            continue
+        if entry.is_dir():
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            entry.unlink(missing_ok=True)
 
 
 # ----------------------------------------------------------------- train

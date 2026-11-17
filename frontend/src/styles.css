@@ -139,11 +139,13 @@ button.primary:hover:not(:disabled) {
 button.danger {
   color: var(--danger);
 }
-button.ghost {
+button.ghost,
+.btn.ghost {
   background: transparent;
   border-color: transparent;
 }
-button.ghost:hover:not(:disabled) {
+button.ghost:hover:not(:disabled),
+.btn.ghost:hover {
   background: var(--panel-2);
 }
 button.icon {
