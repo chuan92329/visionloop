@@ -93,10 +93,13 @@ def protected(rel: str) -> bool:
     return rel in PROTECTED_FILES or any(rel == d or rel.startswith(d + "/") for d in PROTECTED_DIRS)
 
 
-def installed_from_release(root: Path = PROGRAM_ROOT) -> bool:
-    """A git checkout updates with git pull; only an unpacked release zip updates itself."""
-    return (root / MANIFEST).is_file() and (root / "frontend" / "dist" / ".release").is_file() \
-        and not (root / ".git").exists()
+def can_update_itself(root: Path = PROGRAM_ROOT) -> bool:
+    """A git checkout updates with git pull.  Any other copy of the program updates itself: the
+    release zip, and also GitHub's "Source code (zip)", which has no release_manifest.txt.  Without
+    one, the first update only adds and replaces files (nothing is removed); it then brings the
+    manifest, so later updates are the same as for the release zip."""
+    return not (root / ".git").exists() and (root / "backend" / "app" / "__init__.py").is_file() \
+        and (root / "scripts" / "desktop.py").is_file()
 
 
 # ------------------------------------------------------------- zip checks
@@ -358,8 +361,8 @@ def install_pending(root: Path, data_dir: Path, logfile: Path) -> bool:
         return False
     version = pending.get("version", "")
     try:
-        if not installed_from_release(root):
-            raise UpdateError("這個資料夾不是從發佈的 zip 安裝的，無法自動更新")
+        if not can_update_itself(root):
+            raise UpdateError("這個資料夾是用 git 下載的，請用 git pull 更新")
         install(root, Path(pending["zip"]), version, data_dir, logfile)
     except Exception as exc:  # noqa: BLE001
         log.warning("update to %s failed: %s", version, exc)

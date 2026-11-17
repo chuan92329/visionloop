@@ -103,8 +103,8 @@ def update_check():
 
 # ------------------------------------------------------------- self-update
 def can_install() -> bool:
-    """Only the desktop app installed from a release zip can replace its own files."""
-    return self_update.restart_hook is not None and self_update.installed_from_release()
+    """Only the desktop app, not run from a git checkout, can replace its own files."""
+    return self_update.restart_hook is not None and self_update.can_update_itself()
 
 
 def _only_here(request: Request) -> None:

@@ -19,11 +19,18 @@ from app.services import self_update as su
 
 
 # ------------------------------------------------------------- fixtures
-def write_install(root: Path, files: dict[str, str]) -> None:
-    """A program folder as unpacked from a release zip."""
+def write_install(root: Path, files: dict[str, str], release: bool = True) -> None:
+    """A program folder as unpacked from a release zip, or (``release=False``) from GitHub's
+    "Source code (zip)": no manifest and a web UI built on this computer."""
     for rel, text in files.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_text(text, encoding="utf-8")
+    if not release:
+        (root / "frontend" / "dist" / "assets").mkdir(parents=True, exist_ok=True)
+        (root / "frontend" / "dist" / "assets" / "index-local.js").write_text("built here")
+        (root / "frontend" / "node_modules" / "vite").mkdir(parents=True, exist_ok=True)
+        (root / "frontend" / "node_modules" / "vite" / "index.js").write_text("npm package")
+        return
     (root / "frontend" / "dist").mkdir(parents=True, exist_ok=True)
     (root / "frontend" / "dist" / ".release").write_text("v0.0.1")
     listed = sorted({*files, "frontend/dist/.release", su.MANIFEST})
@@ -48,6 +55,7 @@ OLD = {
     "backend/app/main.py": "old main\n",
     "backend/requirements.txt": "fastapi\n",
     "scripts/gone.py": "shipped before, not any more\n",
+    "scripts/desktop.py": "launcher\n",
 }
 
 
@@ -177,7 +185,42 @@ def test_git_checkout_is_never_updated(install, tmp_path):
     pending(data, make_release(tmp_path / "u.zip", "v0.0.2", NEW), "v0.0.2")
     assert su.install_pending(root, data, data / "log.txt") is False
     assert (root / "backend" / "app" / "main.py").read_text() == "old main\n"
-    assert "zip" in su.last_result(data)["message"]
+    assert "git" in su.last_result(data)["message"]
+
+
+def test_source_code_zip_updates_and_becomes_a_release_install(tmp_path, monkeypatch):
+    """GitHub's "Source code (zip)" has no manifest: the first update adds and replaces files,
+    removes nothing, and leaves a manifest so the next update works like a release's."""
+    root, data = tmp_path / "src", tmp_path / "src" / "data"
+    write_install(root, OLD, release=False)
+    (data / "projects").mkdir(parents=True)
+    (data / "projects" / "p.txt").write_text("my project")
+    monkeypatch.setattr(su, "check_can_start", lambda *a: True)
+    monkeypatch.setattr(su, "_run", lambda *a, **k: True)
+    assert su.can_update_itself(root) and not (root / su.MANIFEST).exists()
+
+    pending(data, make_release(tmp_path / "u.zip", "v0.0.2", NEW), "v0.0.2")
+    assert su.install_pending(root, data, data / "log.txt") is True
+
+    assert (root / "backend" / "app" / "main.py").read_text() == "new main\n"
+    assert (root / "scripts" / "added.py").exists()
+    assert (root / "scripts" / "gone.py").exists()  # nothing says it belonged to the program
+    assert (root / "frontend" / "node_modules" / "vite" / "index.js").read_text() == "npm package"
+    assert (root / "frontend" / "dist" / ".release").read_text() == "v0.0.2"
+    assert (root / "data" / "projects" / "p.txt").read_text() == "my project"
+    assert (root / su.MANIFEST).is_file()
+
+    # a failed first start puts the source copy back as it was
+    assert su.undo_failed_start(root, data, "x") is True
+    assert (root / "backend" / "app" / "main.py").read_text() == "old main\n"
+    assert not (root / su.MANIFEST).exists() and not (root / "frontend" / "dist" / ".release").exists()
+    assert (root / "frontend" / "dist" / "assets" / "index-local.js").read_text() == "built here"
+
+
+def test_a_folder_without_the_program_is_not_updated(tmp_path):
+    (tmp_path / "backend" / "app").mkdir(parents=True)
+    (tmp_path / "backend" / "app" / "__init__.py").write_text("x")
+    assert not su.can_update_itself(tmp_path)  # no launcher: not a VisionLoop folder
 
 
 # ------------------------------------------------------------ zip checks
@@ -297,7 +340,7 @@ def test_restart_waits_for_running_jobs_and_a_finished_download(client, project,
 
     calls = []
     monkeypatch.setattr(su, "restart_hook", lambda: calls.append(1))
-    monkeypatch.setattr(su, "installed_from_release", lambda root=None: True)
+    monkeypatch.setattr(su, "can_update_itself", lambda root=None: True)
     assert client.post("/api/update/restart").status_code == 409  # nothing downloaded yet
 
     z = make_release(settings.data_dir / "u.zip", "v99.0.0", NEW)
