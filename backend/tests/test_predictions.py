@@ -7,6 +7,7 @@ import zipfile
 from PIL import Image as PILImage
 
 from app.config import settings
+from app.routers import jobs as jobs_router
 from app.services.predictions import PredictedBox, PredictionWriter, predict_folder, yolo_lines
 
 from .conftest import upload, wait_job
@@ -36,7 +37,10 @@ def test_writer_draws_boxes_and_writes_labels(tmp_path):
     assert w.count == 2
 
 
-def test_labeling_job_keeps_predictions_until_its_record_goes(client, project):
+def test_labeling_job_keeps_predictions_until_its_record_goes(client, project, monkeypatch):
+    opened_folders = []
+    # never open a real file manager window: the folder is deleted when the test ends
+    monkeypatch.setattr(jobs_router, "_reveal", opened_folders.append)
     pid = project["id"]
     upload(client, pid, [f"img{i}.jpg" for i in range(4)])
     job = wait_job(client, client.post(f"/api/projects/{pid}/autolabel", json={"plugin": "demo", "confidence": 0.0}).json()["id"])
@@ -62,7 +66,8 @@ def test_labeling_job_keeps_predictions_until_its_record_goes(client, project):
     assert sum(n.startswith("labels/") for n in names) == 4
 
     opened = client.post(f"/api/jobs/{job['id']}/open-predictions")
-    assert opened.status_code == 200 and opened.json()["path"] == str(folder)
+    assert opened.status_code == 200 and opened.json() == {"path": str(folder), "opened": True}
+    assert opened_folders == [folder]
 
     assert client.delete(f"/api/jobs/{job['id']}").status_code == 204
     assert not folder.parent.exists()
